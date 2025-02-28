@@ -8,7 +8,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 # Directories and Model Config
-PERSIST_DIR = "./CardDataTrimmed"
+PERSIST_DIR = "./chroma_data11"
 COLLECTION_NAME = "cards_collection"
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
