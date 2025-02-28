@@ -1,7 +1,6 @@
 import streamlit as st
 __import__('pysqlite3')
 import sys
-
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import chromadb
 from chromadb.config import Settings
@@ -24,7 +23,22 @@ def get_sbert_model():
     return SentenceTransformer(MODEL_NAME)
 
 
+@st.cache_resource
+def get_unique_values_cached():
+    """Cache unique values so they are computed only once."""
+    collection = get_chroma_collection()
+    return {
+        'set_name': get_unique_values(collection, 'set_name'),
+        'card_type': get_unique_values(collection, 'card_type'),
+        'color': get_unique_values(collection, 'color'),
+        'rarity': get_unique_values(collection, 'rarity'),
+        'level': get_unique_values(collection, 'level'),
+        'triggers': get_unique_values(collection, 'triggers'),
+    }
+
+
 def get_unique_values(collection, field_name):
+    """Retrieve unique values for a given field."""
     unique_vals = set()
     limit, offset = 1000, 0
     while True:
@@ -41,6 +55,7 @@ def get_unique_values(collection, field_name):
 
 
 def build_filter_dict(set_name, card_type, color, rarity, level, triggers):
+    """Constructs a filter dictionary for database queries."""
     f = {k: v for k, v in {
         "set_name": set_name,
         "card_type": card_type,
@@ -49,18 +64,27 @@ def build_filter_dict(set_name, card_type, color, rarity, level, triggers):
         "level": level,
         "triggers": triggers
     }.items() if v and v != "(No Filter)"}
-    return f
+
+    if len(f) > 1:
+        return {"$and": [{k: v} for k, v in f.items()]}
+    elif len(f) == 1:
+        return f
+    return {}
+
+
+@st.cache_resource
+def get_filtered_cards(filter_dict, limit):
+    """Cache filtered card results to avoid redundant database queries."""
+    collection = get_chroma_collection()
+    return dumb_search(collection, filter_dict, limit)
 
 
 def smart_search(collection, model, query_text, n_results, filter_dict):
+    """Performs an AI-enhanced search using embeddings."""
     if not query_text.strip():
         return []
 
     query_embedding = model.encode(query_text).tolist()
-
-    if len(filter_dict) > 1:
-        filter_dict = {"$and": [{k: v} for k, v in filter_dict.items()]}
-
     query_kwargs = {
         "query_embeddings": [query_embedding],
         "n_results": n_results,
@@ -78,9 +102,7 @@ def smart_search(collection, model, query_text, n_results, filter_dict):
 
 
 def dumb_search(collection, filter_dict, limit=500):
-    if len(filter_dict) > 1:
-        filter_dict = {"$and": [{k: v} for k, v in filter_dict.items()]}
-
+    """Fetches cards from the database using filters only."""
     query_kwargs = {
         "include": ["metadatas", "documents"],
         "limit": limit
@@ -97,6 +119,7 @@ def dumb_search(collection, filter_dict, limit=500):
 
 
 def show_card_details(card_meta):
+    """Displays details of a card."""
     if card_meta.get("image", ""):
         st.image(card_meta["image"], width=250)
     st.write(f"**Name**: {card_meta.get('name', '')}")
@@ -116,26 +139,23 @@ def show_card_details(card_meta):
 
 
 def main():
-    st.title("Weiss Card Search (Scuff)")
+    st.title("Weiss Card Search (scuff)")
 
     collection, sbert_model = get_chroma_collection(), get_sbert_model()
-    unique_sets, unique_card_types = get_unique_values(collection, 'set_name'), get_unique_values(collection,
-                                                                                                  'card_type')
-    unique_colors, unique_rarities = get_unique_values(collection, 'color'), get_unique_values(collection, 'rarity')
-    unique_levels, unique_triggers = get_unique_values(collection, 'level'), get_unique_values(collection, 'triggers')
+    unique_values = get_unique_values_cached()
 
     st.subheader("🔍 Filters")
     col1, col2 = st.columns(2)
     with col1:
-        selected_set_name = st.selectbox("Set Name", ["(No Filter)"] + unique_sets)
-        selected_color = st.selectbox("Color", ["(No Filter)"] + unique_colors)
-        selected_level = st.selectbox("Level", ["(No Filter)"] + unique_levels)
+        selected_set_name = st.selectbox("Set Name", ["(No Filter)"] + unique_values['set_name'])
+        selected_color = st.selectbox("Color", ["(No Filter)"] + unique_values['color'])
+        selected_level = st.selectbox("Level", ["(No Filter)"] + unique_values['level'])
     with col2:
-        selected_card_type = st.selectbox("Card Type", ["(No Filter)"] + unique_card_types)
-        selected_rarity = st.selectbox("Rarity", ["(No Filter)"] + unique_rarities)
-        selected_triggers = st.selectbox("Triggers", ["(No Filter)"] + unique_triggers)
+        selected_card_type = st.selectbox("Card Type", ["(No Filter)"] + unique_values['card_type'])
+        selected_rarity = st.selectbox("Rarity", ["(No Filter)"] + unique_values['rarity'])
+        selected_triggers = st.selectbox("Triggers", ["(No Filter)"] + unique_values['triggers'])
 
-    st.subheader("Smart Search (AI!!!!)")
+    st.subheader("Smart Search (AI)")
     user_query = st.text_input("Enter your query text:", value="", help="ex. 'counter send opponent to memory'")
     n_results = st.slider("Number of results", min_value=1, max_value=30, value=10)
 
@@ -148,9 +168,8 @@ def main():
         st.success(f"Found {len(results)} result(s).")
 
         for card_id, card_doc, card_meta, distance in results:
-            dist_str = f"(Distance={round(distance, 3)})" if distance is not None else ""
-            st.expander(f"{card_meta.get('name', 'Unknown')} {dist_str}", expanded=False).write(
-                show_card_details(card_meta))
+            with st.expander(f"{card_meta.get('name', 'Unknown')} (Distance={round(distance, 3)})", expanded=False):
+                show_card_details(card_meta)
 
     st.divider()
 
@@ -162,12 +181,12 @@ def main():
             selected_set_name, selected_card_type, selected_color, selected_rarity, selected_level, selected_triggers
         )
         with st.spinner("Fetching cards..."):
-            results = dumb_search(collection, filter_dict, limit=dumb_limit)
+            results = get_filtered_cards(filter_dict, limit=dumb_limit)
         st.success(f"Showing {len(results)} card(s).")
 
-        with st.container():  # Avoid nested expanders
-            for card_id, card_doc, card_meta, _ in results:
-                st.expander(f"{card_meta.get('name', 'Unknown')}", expanded=False).write(show_card_details(card_meta))
+        for card_id, card_doc, card_meta, _ in results:
+            with st.expander(f"{card_meta.get('name', 'Unknown')}", expanded=False):
+                show_card_details(card_meta)
 
 
 if __name__ == "__main__":
