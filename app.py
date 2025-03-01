@@ -19,7 +19,7 @@ def decompress_zip_file(base_dir, filename):
     input_zip = os.path.join(base_dir, filename)
 
     with zipfile.ZipFile(input_zip, 'r') as zip_ref:
-        zip_ref.extractall(base_dir)  # Extract all files in the same directory
+        zip_ref.extractall()  # Extract all files in the same directory
 
     print(f"Decompressed {input_zip} -> {base_dir}")
 
