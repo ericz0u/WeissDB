@@ -160,12 +160,12 @@ def show_card_details(card_meta):
 
 
 def main():
-    st.title("Weiss Card Search (Optimized)")
+    st.title("Weiss Card Search (scuff)")
 
     collection, sbert_model = get_chroma_collection(), get_sbert_model()
     unique_values = get_unique_values_cached()
 
-    st.subheader("🔍 Filters")
+    st.subheader("Filters")
     col1, col2 = st.columns(2)
     with col1:
         selected_set_name = st.selectbox("Set Name", ["(No Filter)"] + unique_values['set_name'])
@@ -176,11 +176,11 @@ def main():
         selected_rarity = st.selectbox("Rarity", ["(No Filter)"] + unique_values['rarity'])
         selected_triggers = st.selectbox("Triggers", ["(No Filter)"] + unique_values['triggers'])
 
-    st.subheader("Smart Search (AI)")
+    st.subheader("Smart Search (AI!!!!! Cool!!!!)")
     user_query = st.text_input("Enter your query text:", value="", help="ex. 'counter send opponent to memory'")
     n_results = st.slider("Number of results", min_value=1, max_value=30, value=10)
 
-    if st.button("🔎 Run Smart Search", use_container_width=True):
+    if st.button("Run Smart Search", use_container_width=True):
         filter_dict = build_filter_dict(
             selected_set_name, selected_card_type, selected_color, selected_rarity, selected_level, selected_triggers
         )
