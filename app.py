@@ -1,13 +1,34 @@
 import streamlit as st
+
 __import__('pysqlite3')
 import sys
+
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+import os
+import zipfile
+
+PERSIST_DIR = "./chroma_data13"
+COMPRESSED_FILES = ["chroma.sqlite3.zip"]
+
+
+def decompress_zip_file(base_dir, filename):
+    """Decompress a .zip file within a specified directory."""
+    input_zip = os.path.join(base_dir, filename)
+
+    with zipfile.ZipFile(input_zip, 'r') as zip_ref:
+        zip_ref.extractall(base_dir)  # Extract all files in the same directory
+
+    print(f"Decompressed {input_zip} -> {base_dir}")
+
+
+# Decompress all ZIP files
+for file in COMPRESSED_FILES:
+    decompress_zip_file(PERSIST_DIR, file)
 
 # Directories and Model Config
-PERSIST_DIR = "./chroma_data11"
 COLLECTION_NAME = "cards_collection"
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -139,7 +160,7 @@ def show_card_details(card_meta):
 
 
 def main():
-    st.title("Weiss Card Search (scuff)")
+    st.title("Weiss Card Search (Optimized)")
 
     collection, sbert_model = get_chroma_collection(), get_sbert_model()
     unique_values = get_unique_values_cached()
